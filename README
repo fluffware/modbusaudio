@@ -1,0 +1,3 @@
+This is a Modbus TCP server that play audio clips when setting a register.
+It's intended for playing sounds from a PLC or similar.
+
