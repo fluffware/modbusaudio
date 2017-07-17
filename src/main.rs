@@ -21,7 +21,26 @@ const SAMPLE_RATE: f64 = 44_100.0;
 const CHANNELS: i32 = 2;
 const FRAMES_PER_BUFFER: u32 = 1024;
 
+struct SplitQuoted<'a>
+{
+    s: &'a str,
+    pos: usize
+}
 
+impl<'a> Iterator for SplitQuoted<'a>
+{
+    type Item = &'a str;
+    fn next(&mut self) -> Option<&'a str> {
+        Some("g")
+    }
+}
+
+fn split_quoted<'a>(s: &'a str) -> SplitQuoted {
+    for c in s.chars() {
+        
+    }
+    SplitQuoted {s: s, pos: 0}
+}
 
 fn main() {
     let  args = env::args_os();
