@@ -17,16 +17,18 @@ fn main() {
     run().unwrap()
 }
 
-fn read_config() -> std:io:Result(())
+fn read_config() -> std::io::Result<()>
 {
+    Ok(())
 }
 
 fn run() -> Result<(), pa::Error> {
 
-   let mut reader = hound::WavReader::open("D:\\Ljud\\Alarm.wav").unwrap();
-   let sbuffer = Arc::new(reader.samples::<i16>().map(|r| {r.unwrap()}).collect::<Vec<i16>>());
-   println!("WAV: {:?}", reader.spec());
-   
+    let mut reader = hound::WavReader::open("D:\\Ljud\\Alarm.wav").unwrap();
+    let sbuffer = Arc::new(reader.samples::<i16>()
+                           .map(|r| {r.unwrap()}).collect::<Vec<i16>>());
+    println!("WAV: {:?}", reader.spec());
+    
     let pa = try!(pa::PortAudio::new());		
     
     println!("PortAudio:");
@@ -37,13 +39,15 @@ fn run() -> Result<(), pa::Error> {
     let default_host = try!(pa.default_host_api());
     println!("default host: {:#?}", pa.host_api_info(default_host));
 
-   
+    
 
     let def_output = try!(pa.default_output_device());
     let output_info = try!(pa.device_info(def_output));
     println!("Default output device info: {:#?}", &output_info);
 
-   let mut settings: pa::OutputStreamSettings<i16> = try!(pa.default_output_stream_settings(CHANNELS, SAMPLE_RATE, FRAMES_PER_BUFFER));
+    let mut settings: pa::OutputStreamSettings<i16> =
+        try!(pa.default_output_stream_settings(CHANNELS, SAMPLE_RATE, 
+                                               FRAMES_PER_BUFFER));
     // we won't output out of range samples so don't bother clipping them.
     settings.flags = pa::stream_flags::CLIP_OFF;
 
@@ -54,10 +58,10 @@ fn run() -> Result<(), pa::Error> {
     	let samples = 2 * frames;
     	let copy_len = if sbuffer_pos + samples > sbuffer.len() {
 	    sbuffer.len()- sbuffer_pos
-	 } else {
-	   samples
-	 };
-	    
+	} else {
+	    samples
+	};
+	
     	buffer[0..copy_len].copy_from_slice(&sbuffer[sbuffer_pos..sbuffer_pos + copy_len]);
 	sbuffer_pos += copy_len;
         pa::Continue
@@ -67,7 +71,7 @@ fn run() -> Result<(), pa::Error> {
 
     try!(stream.start());
 
-   
+    
     pa.sleep(5 * 1_000);
 
     try!(stream.stop());
