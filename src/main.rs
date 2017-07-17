@@ -8,17 +8,50 @@ extern crate hound;
 
 use portaudio as pa;
 use std::sync::Arc;
+use std::fs::File;
+use std::path::Path;
+use std::ffi::OsStr;
+use std::env;
+use std::io::Write;
+use std::io::BufReader;
+use std::io::BufRead;
+use std::error::Error;
 
 const SAMPLE_RATE: f64 = 44_100.0;
 const CHANNELS: i32 = 2;
 const FRAMES_PER_BUFFER: u32 = 1024;
 
+
+
 fn main() {
+    let  args = env::args_os();
+    let mut args = args.skip(1);
+    let conf_path_str = 
+        if let Some(path) = args.next() {
+            path
+        } else {
+            OsStr::new("modbusaudio.conf").to_os_string()
+        };
+    if let Err(err) = read_config(Path::new(&conf_path_str)) {
+        writeln!(&mut std::io::stderr(), "Failed to read configuration file {:?}: {:?}", conf_path_str, err.description()).unwrap();
+    }
     run().unwrap()
 }
 
-fn read_config() -> std::io::Result<()>
+fn read_config(path: &Path) -> std::io::Result<()>
 {
+    let f = File::open(path)?;
+    let reader = BufReader::new(f);
+    for line_res in  reader.lines() {
+        if let Ok(line) = line_res {
+            let trimmed = line.trim();
+            if trimmed.starts_with("audio") {
+                
+            } else {
+                println!("Line: {}", line);
+            }
+        }
+    }
     Ok(())
 }
 
