@@ -8,6 +8,7 @@ extern crate hound;
 
 use portaudio as pa;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::fs::File;
 use std::path::Path;
 use std::ffi::OsStr;
@@ -34,6 +35,34 @@ macro_rules! print_err {
     ($fmt:expr, $($arg:tt)*) => {writeln!(&mut std::io::stderr(),
                                           $fmt,
                                           $($arg)*).unwrap()}
+}
+
+struct ServerOps
+{
+}
+
+impl ServerOps
+{
+    fn new() -> ServerOps
+    {
+        ServerOps{}
+    }
+}
+         
+impl modbus_server::Ops for ServerOps
+{
+    fn get_input(&self, addr: u16) -> Result<bool, u8> {
+        Err(modbus_server::ILLEGAL_DATA_ADDRESS)
+    }
+
+    fn get_coil(&self, addr: u16) -> Result<bool, u8> {
+        Err(modbus_server::ILLEGAL_DATA_ADDRESS)
+    }
+    
+    fn set_coil(&mut self, addr: u16, v: bool) -> Result<bool, u8> {
+        Ok(v)
+    }
+    
 }
 
 fn main() {
@@ -89,7 +118,8 @@ fn main() {
         println!("Cmd: {}", line.cmd);
     }
     let audio_clips = Arc::new(audio_clips);
-    let server = modbus_server::Server::new("0.0.0.0:5020").unwrap();
+    
+    let server = modbus_server::Server::new("0.0.0.0:5020", Arc::new(Mutex::new(ServerOps::new()))).unwrap();
     //run().unwrap()
     server.stop();
 }
