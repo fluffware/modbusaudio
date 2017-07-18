@@ -17,33 +17,28 @@ use std::io::BufReader;
 use std::io::BufRead;
 use std::error::Error;
 
+use std::collections::btree_map::BTreeMap;
+
 const SAMPLE_RATE: f64 = 44_100.0;
 const CHANNELS: i32 = 2;
 const FRAMES_PER_BUFFER: u32 = 1024;
 
-struct SplitQuoted<'a>
-{
-    s: &'a str,
-    pos: usize
-}
+mod split_quoted;
+use split_quoted::split_quoted;
 
-impl<'a> Iterator for SplitQuoted<'a>
-{
-    type Item = &'a str;
-    fn next(&mut self) -> Option<&'a str> {
-        Some("g")
-    }
-}
+mod modbus_server;
 
-fn split_quoted<'a>(s: &'a str) -> SplitQuoted {
-    for c in s.chars() {
-        
-    }
-    SplitQuoted {s: s, pos: 0}
+macro_rules! print_err {
+    ($fmt:expr) => {writeln!(&mut std::io::stderr(),
+                             $fmt).unwrap()};
+    ($fmt:expr, $($arg:tt)*) => {writeln!(&mut std::io::stderr(),
+                                          $fmt,
+                                          $($arg)*).unwrap()}
 }
 
 fn main() {
-    let  args = env::args_os();
+    let mut audio_clips = BTreeMap::<u16, Vec<i16>>::new();
+    let args = env::args_os();
     let mut args = args.skip(1);
     let conf_path_str = 
         if let Some(path) = args.next() {
@@ -51,36 +46,86 @@ fn main() {
         } else {
             OsStr::new("modbusaudio.conf").to_os_string()
         };
-    if let Err(err) = read_config(Path::new(&conf_path_str)) {
-        writeln!(&mut std::io::stderr(), "Failed to read configuration file {:?}: {:?}", conf_path_str, err.description()).unwrap();
+    let conf =
+        match read_config(Path::new(&conf_path_str)) {
+            Err(err) => {
+                print_err!("Failed to read configuration file {:?}: {:?}", conf_path_str, err.description());
+                return
+            },
+            Ok(c) => c
+        };
+    for line in conf {
+        if line.cmd == "audio" {
+            if line.args.len() < 2 {
+                 print_err!("Too few arguments for audio clip");
+                return
+            }
+            let slot = 
+                match line.args[0].parse::<u16>() {
+                    Ok(i) => i,
+                    Err(err) => {
+                        print_err!("Invalid audio slot: {}",
+                                   err.description());
+                        return
+                    }
+                };
+
+            let path = Path::new(&line.args[1]);
+            match hound::WavReader::open(path) {
+                Ok(mut reader) => {
+                    let sbuffer = reader.samples::<i16>()
+                        .map(|r| {r.unwrap()}).collect::<Vec<i16>>();
+                    audio_clips.insert(slot, sbuffer);
+                    println!("WAV: {:?}", reader.spec());
+                },
+                Err(err) => {
+                    print_err!("Failed to open audio file \"{}\": {}",
+                               &line.args[1], err.description());
+                    return
+                }
+            }
+    
+        }
+        println!("Cmd: {}", line.cmd);
     }
-    run().unwrap()
+    let audio_clips = Arc::new(audio_clips);
+    let server = modbus_server::Server::new("0.0.0.0:5020").unwrap();
+    //run().unwrap()
+    server.stop();
 }
 
-fn read_config(path: &Path) -> std::io::Result<()>
+struct Config
 {
+    cmd: String,
+    args: Vec<String>
+}
+
+fn read_config(path: &Path) -> std::io::Result<Vec<Config>>
+{
+    let mut conf = Vec::<Config>::new();
     let f = File::open(path)?;
     let reader = BufReader::new(f);
     for line_res in  reader.lines() {
         if let Ok(line) = line_res {
-            let trimmed = line.trim();
-            if trimmed.starts_with("audio") {
-                
-            } else {
-                println!("Line: {}", line);
-            }
+            let mut tokens = split_quoted(&line);
+            if let Some(cmd) = tokens.next() {
+                if cmd.starts_with("#") {
+                    // Comment, ignore
+                } else {
+                    let conf_line = 
+                        Config{cmd: cmd.to_string(), 
+                               args: tokens.map(|arg| arg.to_string()).collect::<Vec<String>>()};
+                    conf.push(conf_line);
+                }
+            }   
         }
     }
-    Ok(())
+    Ok(conf)
 }
 
 fn run() -> Result<(), pa::Error> {
 
-    let mut reader = hound::WavReader::open("D:\\Ljud\\Alarm.wav").unwrap();
-    let sbuffer = Arc::new(reader.samples::<i16>()
-                           .map(|r| {r.unwrap()}).collect::<Vec<i16>>());
-    println!("WAV: {:?}", reader.spec());
-    
+    let sbuffer = vec!(0);
     let pa = try!(pa::PortAudio::new());		
     
     println!("PortAudio:");
@@ -135,3 +180,4 @@ fn run() -> Result<(), pa::Error> {
 
     Ok(())
 }
+
