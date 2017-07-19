@@ -6,7 +6,6 @@
 extern crate portaudio;
 extern crate hound;
 
-use portaudio as pa;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::fs::File;
@@ -18,16 +17,16 @@ use std::io::BufReader;
 use std::io::BufRead;
 use std::error::Error;
 
-use std::collections::btree_map::BTreeMap;
 
-const SAMPLE_RATE: f64 = 44_100.0;
-const CHANNELS: i32 = 2;
-const FRAMES_PER_BUFFER: u32 = 1024;
+use std::collections::btree_map::BTreeMap;
 
 mod split_quoted;
 use split_quoted::split_quoted;
 
 mod modbus_server;
+
+mod clip_player;
+use clip_player::ClipPlayer;
 
 macro_rules! print_err {
     ($fmt:expr) => {writeln!(&mut std::io::stderr(),
@@ -39,34 +38,44 @@ macro_rules! print_err {
 
 struct ServerOps
 {
+    player: Arc<Mutex<ClipPlayer>>,
+    state: BTreeMap<u16, bool>
 }
 
 impl ServerOps
 {
-    fn new() -> ServerOps
+    fn new(player: Arc<Mutex<ClipPlayer>>) -> ServerOps
     {
-        ServerOps{}
+        ServerOps{player: player, state: BTreeMap::new()}
     }
 }
          
 impl modbus_server::Ops for ServerOps
 {
-    fn get_input(&self, addr: u16) -> Result<bool, u8> {
+    fn get_input(&self, _addr: u16) -> Result<bool, u8> {
         Err(modbus_server::ILLEGAL_DATA_ADDRESS)
     }
 
-    fn get_coil(&self, addr: u16) -> Result<bool, u8> {
+    fn get_coil(&self, _addr: u16) -> Result<bool, u8> {
         Err(modbus_server::ILLEGAL_DATA_ADDRESS)
     }
     
     fn set_coil(&mut self, addr: u16, v: bool) -> Result<bool, u8> {
+        //println!("{}: {}", addr, v);
+        let bit = *self.state.get(&addr).unwrap_or(&false);
+        if bit != v {
+            self.state.insert(addr, v);
+            let mut player = self.player.lock().unwrap();
+            match player.play_clip(addr) {
+                _ => ()
+            }
+        }
         Ok(v)
     }
     
 }
 
 fn main() {
-    let mut audio_clips = BTreeMap::<u16, Vec<i16>>::new();
     let args = env::args_os();
     let mut args = args.skip(1);
     let conf_path_str = 
@@ -83,6 +92,16 @@ fn main() {
             },
             Ok(c) => c
         };
+
+     let mut player = match clip_player::ClipPlayer::new(44_100,2) {
+         Ok(s) => s,
+            Err(e) => {
+                print_err!("Failed to start audio clip player: {}", 
+                           e.description());
+                return;
+            }
+        };
+    
     for line in conf {
         if line.cmd == "audio" {
             if line.args.len() < 2 {
@@ -104,7 +123,7 @@ fn main() {
                 Ok(mut reader) => {
                     let sbuffer = reader.samples::<i16>()
                         .map(|r| {r.unwrap()}).collect::<Vec<i16>>();
-                    audio_clips.insert(slot, sbuffer);
+                    player.add_clip(slot, sbuffer);
                     println!("WAV: {:?}", reader.spec());
                 },
                 Err(err) => {
@@ -115,13 +134,22 @@ fn main() {
             }
     
         }
-        println!("Cmd: {}", line.cmd);
+        //println!("Cmd: {}", line.cmd);
     }
-    let audio_clips = Arc::new(audio_clips);
-    
-    let server = modbus_server::Server::new("0.0.0.0:5020", Arc::new(Mutex::new(ServerOps::new()))).unwrap();
-    //run().unwrap()
-    server.stop();
+
+    let player = Arc::new(Mutex::new(player));
+    let mb_ops = Arc::new(Mutex::new(ServerOps::new(player)));
+    let server = 
+        match modbus_server::Server::new("0.0.0.0:5020", mb_ops) {
+            Ok(s) => s,
+            Err(e) => {
+                print_err!("Failed to start Modbus server: {}", 
+                           e.description());
+                return;
+            }
+        };
+
+    server.run();
 }
 
 struct Config
@@ -153,6 +181,7 @@ fn read_config(path: &Path) -> std::io::Result<Vec<Config>>
     Ok(conf)
 }
 
+#[cfg(not_used)]
 fn run() -> Result<(), pa::Error> {
 
     let sbuffer = vec!(0);
