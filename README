@@ -1,3 +1,8 @@
-This is a Modbus TCP server that play audio clips when setting a register.
+This is a Modbus TCP server that play audio clips when toggling coils.
 It's intended for playing sounds from a PLC or similar.
+
+What sounds to play and what the addresses of the corresponding coils are is determined by a configuration file.
+Only WAV-files are supported currently.
+
+PortAudio is used for sound playback.
 
