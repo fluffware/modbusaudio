@@ -54,6 +54,11 @@ impl ClipPlayer {
 	        
     	        buffer[0..copy_len].copy_from_slice(&sbuffer[sbuffer_pos..sbuffer_pos + copy_len]);
 	        sbuffer_pos += copy_len;
+                if copy_len < samples {
+                    for i in copy_len..samples {
+                        buffer[i] = 0;
+                    }
+                }
                 if sbuffer_pos == sbuffer.len() {pa::Complete} else {pa::Continue}
             };
         let stream = pa.open_non_blocking_stream(settings, callback)?;
