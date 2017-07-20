@@ -74,6 +74,9 @@ fn handle_request(req: & [u8], ops:Arc<Mutex<Ops>>) -> Vec<u8>
     let mut ops = ops.lock().unwrap();
     match req[0] {
         WRITE_SINGLE_COIL => {
+            if req.len() != 5 {
+                return vec![WRITE_SINGLE_COIL | 0x80, ILLEGAL_DATA_VALUE];
+            }
             let addr = be16_to_u16(&req[1..3]);
             match (*ops).set_coil(addr,req[3] != 0x00) {
                 Ok(v) =>            vec![WRITE_SINGLE_COIL, 
@@ -82,6 +85,9 @@ fn handle_request(req: & [u8], ops:Arc<Mutex<Ops>>) -> Vec<u8>
             }
         },
         WRITE_MULTIPLE_COILS => {
+            if req.len() < 6 {
+                return vec![WRITE_MULTIPLE_COILS | 0x80, ILLEGAL_DATA_VALUE];
+            }
             let addr = be16_to_u16(&req[1..3]);
             let len = be16_to_u16(&req[3..5]);
             let n_bytes = req[5];
